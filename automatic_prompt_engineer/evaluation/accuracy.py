@@ -1,5 +1,6 @@
 from automatic_prompt_engineer import llm, data, evaluate
 import numpy as np
+from tqdm import tqdm
 
 special_output_token = '[[[[OUTPUT]]]]'
 
@@ -30,19 +31,13 @@ def get_query(prompt, eval_template, input_, output_, demo_data, demos_template)
     return query, output_idx
 
 
-def likelihood_evaluator(prompts, eval_template, eval_data, demos_template, few_shot_data, config, client):
+def accuracy_evaluator(prompts, eval_template, eval_data, demos_template, few_shot_data, config, client):
     """
-    For each prompt, evaluate the likelihood of the data (output) given the prompt.
-    Parameters:
-        prompts: A list of prompts.
-        eval_template: The template for the evaluation queries.
-        eval_data: The data to use for evaluation.
-        config: The configuration dictionary.
-    Returns:
-        A LikelihoodEvaluationResult object.
+    Dummy accuracy check
     """
     queries = []
-    output_indices = []
+    targets = []
+    prompt_list = []
     for prompt in prompts:
         subsampled_data = data.subsample_data(
             eval_data, config['num_samples'])
@@ -52,65 +47,73 @@ def likelihood_evaluator(prompts, eval_template, eval_data, demos_template, few_
                 few_shot_data, config['num_few_shot'])
             query, output_idx = get_query(
                 prompt, eval_template, input_, output_, demo_data, demos_template)
-            queries.append(query)
-            output_indices.append(output_idx)
+            queries.append(query[:output_idx[0]])
+            target = query[output_idx[0]:output_idx[1]].split(',')
+            target = [t.strip().lower() for t in target] 
+            targets.append(target)
+            prompt_list.append(prompt)
 
-    # Instantiate the LLM
     model = llm.model_from_config(config['model'], client)
+    accs = []
+    # TODO: parallelize? 
+    prev_prompt = None
+    for prompt, query, target in tqdm(zip(prompt_list, queries, targets)): 
+        if prev_prompt is None or prev_prompt != prompt:
+            accs.append([])
+        answer = model.generate_text(query, n=1)[0].lower()
+        # print('model said:', answer)
+        # print('target:', target)
+        acc = 0
+        for t in target: 
+            acc += t in answer
+        acc /= len(target)
+        # print('acc:', acc, 'prompt:', prompt)
+        accs[-1].append(acc)
+        prev_prompt = prompt
 
-    log_probs, _ = model.log_probs(queries, output_indices)
+    # print(accs)
+    # for prompt, acc in zip(prompts, accs): 
+    #     print(prompt, acc)
 
-    res = LikelihoodEvaluationResult(prompts, log_probs, config['num_samples'])
+    res = AccuracyEvaluationResult(prompts, accs, config['num_samples'])
 
     return res
 
 
-class LikelihoodEvaluationResult(evaluate.EvaluationResult):
+class AccuracyEvaluationResult(evaluate.EvaluationResult):
     """
-    A class for storing the results of a likelihood evaluation. Supports
-    sorting prompts by various statistics of the likelihoods.
+    A class for storing the results of an accuracy evaluation. Supports
+    sorting prompts by various statistics.
     """
 
-    def __init__(self, prompts, log_probs, num_samples):
+    def __init__(self, prompts, accs, num_samples):
         self.prompts = prompts
-        self.log_probs = log_probs
-        self.prompt_log_probs = self._compute_avg_likelihood(
-            prompts, log_probs, num_samples)
+        self.prompt_accs = accs
+        self.num_samples = num_samples
 
-    def _compute_avg_likelihood(self, prompts, log_probs, num_samples):
-        i = 0
-        prompt_log_probs = []
-        for prompt in prompts:
-            prompt_log_probs.append([])
-            for _ in range(num_samples):
-                lps = log_probs[i]
-                prompt_log_probs[-1].append(sum(lps) / len(lps))
-                i += 1
-        return prompt_log_probs
-
-    def _agg_likelihoods(self, method):
+    def _agg_accs(self, method):
         """For each prompt, compute a statistic of the likelihoods (e.g., mean, median, etc.)"""
         if method == 'mean':
-            return [np.mean(lps) for lps in self.prompt_log_probs]
+            return [np.mean(lps) for lps in self.prompt_accs]
         elif method == 'median':
-            return [np.median(lps) for lps in self.prompt_log_probs]
+            return [np.median(lps) for lps in self.prompt_accs]
         elif method == 'std':
-            return [np.std(lps) for lps in self.prompt_log_probs]
+            return [np.std(lps) for lps in self.prompt_accs]
         elif method == 'max':
-            return [np.max(lps) for lps in self.prompt_log_probs]
+            return [np.max(lps) for lps in self.prompt_accs]
         elif method == 'min':
-            return [np.min(lps) for lps in self.prompt_log_probs]
+            return [np.min(lps) for lps in self.prompt_accs]
         elif method == 'iqm':
-            return [np.mean(np.percentile(lps, [25, 75])) for lps in self.prompt_log_probs]
+            return [np.mean(np.percentile(lps, [25, 75])) for lps in self.prompt_accs]
         else:
             raise ValueError(
                 f'Unknown method {method} for aggregating likelihoods')
 
     def sorted(self, method='default'):
         if method == 'default':
-            scores = self._agg_likelihoods('mean')
+            scores = self._agg_accs('mean')
         else:
-            scores = self._agg_likelihoods(method)
+            scores = self._agg_accs(method)
         # Sort prompts by score
         sorted_prompts = [p for _, p in sorted(zip(scores, self.prompts))]
         sorted_scores = sorted(scores)
@@ -121,15 +124,15 @@ class LikelihoodEvaluationResult(evaluate.EvaluationResult):
 
     def in_place(self, method='default'):
         if method == 'default':
-            scores = self._agg_likelihoods('mean')
+            scores = self._agg_accs('mean')
         else:
-            scores = self._agg_likelihoods(method)
+            scores = self._agg_accs(method)
         return self.prompts, scores
 
     def __str__(self):
         s = ''
         prompts, scores = self.sorted()
-        s += 'log(p): prompt\n'
+        s += 'acc: prompt\n'
         s += '----------------\n'
         for prompt, score in list(zip(prompts, scores))[:10]:
             s += f'{score:.2f}: {prompt}\n'

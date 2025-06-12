@@ -1,10 +1,10 @@
 generation:
-  num_subsamples: 5
-  num_demos: 5
-  num_prompts_per_subsample: 50
+  num_subsamples: 5 # the number of unique queries sent to the LLM with different demonstrations for prompt generation
+  num_demos: 5 # the number of demonstrations sent to the LLM for each unique query
+  num_prompts_per_subsample: 10 # the number of prompts generated for each unique query
   model:
     name: GPT_forward
-    batch_size: 500
+    batch_size: 500 # the maximum batch size used for prompt generation
     gpt_config:
       model: gpt-3.5-turbo
       temperature: 0.9
@@ -13,8 +13,8 @@ generation:
       frequency_penalty: 0.0
       presence_penalty: 0.0
 evaluation:
-  method: likelihood
-  num_samples: 50
+  method: accuracy
+  num_samples: 10
   num_few_shot: 5
   model:
     name: GPT_forward
@@ -22,7 +22,7 @@ evaluation:
     gpt_config:
       model: gpt-3.5-turbo
       temperature: 0.7
-      max_tokens: 200
+      max_tokens: 50
       top_p: 1.0
       frequency_penalty: 0.0
       presence_penalty: 0.0

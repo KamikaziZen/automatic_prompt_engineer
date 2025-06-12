@@ -7,7 +7,7 @@ import numpy as np
 from automatic_prompt_engineer import evaluate
 
 
-def bandits_evaluator(prompts, eval_template, eval_data, demos_template, few_shot_data, config):
+def bandits_evaluator(prompts, eval_template, eval_data, demos_template, few_shot_data, config, client):
     base_eval_method = evaluate.get_eval_method(config['base_eval_method'])
     bandit_algo = get_bandit_algo(
         config['bandit_method'], len(prompts), config)
@@ -24,7 +24,7 @@ def bandits_evaluator(prompts, eval_template, eval_data, demos_template, few_sho
         sampled_prompts = [prompts[i] for i in sampled_prompts_idx]
         # Evaluate the sampled prompts
         sampled_eval_results = base_eval_method(
-            sampled_prompts, eval_template, eval_data, demos_template, few_shot_data, config['base_eval_config'])
+            sampled_prompts, eval_template, eval_data, demos_template, few_shot_data, config['base_eval_config'], client=client)
         _, scores = sampled_eval_results.in_place(method='mean')
         # Update the bandit algorithm
         bandit_algo.update(sampled_prompts_idx, scores)

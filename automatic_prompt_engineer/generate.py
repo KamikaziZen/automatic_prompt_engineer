@@ -17,7 +17,7 @@ def get_query(prompt_gen_template, demos_template, subsampled_data):
     return prompt_gen_template.fill(input=inputs[0], output=outputs[0], full_demo=demos)
 
 
-def generate_prompts(prompt_gen_template, demos_template, prompt_gen_data, config):
+def generate_prompts(prompt_gen_template, demos_template, prompt_gen_data, config, client):
     """
     Generates prompts using the prompt generator.
     Parameters:
@@ -36,7 +36,7 @@ def generate_prompts(prompt_gen_template, demos_template, prompt_gen_data, confi
                                  demos_template, subsampled_data))
 
     # Instantiate the LLM
-    model = llm.model_from_config(config['model'], disable_tqdm=False)
+    model = llm.model_from_config(config['model'], client, disable_tqdm=False)
     prompts = model.generate_text(
         queries, n=config['num_prompts_per_subsample'])
     return prompts

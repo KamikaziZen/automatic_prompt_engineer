@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from automatic_prompt_engineer import llm
 
 
-
 def get_eval_method(eval_method):
     """
     Returns the evaluation method object.
@@ -20,11 +19,14 @@ def get_eval_method(eval_method):
     elif eval_method == 'bandits':
         from automatic_prompt_engineer.evaluation import bandits
         return bandits.bandits_evaluator
+    elif eval_method == 'accuracy':
+        from automatic_prompt_engineer.evaluation import accuracy
+        return accuracy.accuracy_evaluator
     else:
         raise ValueError('Invalid evaluation method.')
 
 
-def evalute_prompts(prompts, eval_template, eval_data, demos_template, few_shot_data, eval_method, config):
+def evalute_prompts(prompts, eval_template, eval_data, demos_template, few_shot_data, eval_method, config, client):
     """
     Returns the scores for a list of prompts.
     Parameters:
@@ -36,8 +38,9 @@ def evalute_prompts(prompts, eval_template, eval_data, demos_template, few_shot_
     Returns:
         An evaluation result object.
     """
+    print('Eval method:', eval_method)
     eval_method = get_eval_method(eval_method)
-    return eval_method(prompts, eval_template, eval_data, demos_template, few_shot_data, config)
+    return eval_method(prompts, eval_template, eval_data, demos_template, few_shot_data, config, client=client)
 
 
 def demo_function(eval_template, config):

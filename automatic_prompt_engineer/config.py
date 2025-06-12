@@ -44,3 +44,7 @@ def simple_config(eval_model, prompt_gen_model, prompt_gen_mode, num_prompts, ev
     conf['evaluation']['base_eval_config']['num_samples'] = 5
     # In this simple demo, there is no dataset splitting, so we just use the same data for prompt generation and evaluation
     return conf
+
+def load_config(config_path):
+    conf = update_config({}, config_path)
+    return conf
